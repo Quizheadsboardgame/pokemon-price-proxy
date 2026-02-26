@@ -1,50 +1,44 @@
 const express = require("express");
 const fetch = require("node-fetch");
 const cors = require("cors");
+const cheerio = require("cheerio");
 
 const app = express();
 app.use(cors());
 
-const API_KEY = "pokeprice_free_2aeea2582995971bab40fead2d3fc6645d131c9d2a9b0ecc";
-
 app.get("/price", async (req, res) => {
   try {
     const name = req.query.name;
-    if (!name) {
-      return res.json({ error: "missing name" });
-    }
+    if (!name) return res.json({ error: "missing name" });
 
-    const url =
-      `https://www.pokemonpricetracker.com/api/v1/price?name=${encodeURIComponent(name)}`;
+    // Convert card name to PriceCharting search URL
+    const searchUrl = `https://www.pricecharting.com/search-products?type=pokemon&query=${encodeURIComponent(name)}`;
 
-    console.log("Fetching:", url);
+    const response = await fetch(searchUrl);
+    const html = await response.text();
 
-    const response = await fetch(url, {
-      headers: { "x-api-key": API_KEY }
-    });
+    const $ = cheerio.load(html);
 
-    const text = await response.text();
+    // Pick the first search result
+    const row = $("table tbody tr").first();
 
-    // 👇 log raw response (VERY IMPORTANT)
-    console.log("API response:", text);
+    if (!row) return res.json({ error: "card not found" });
 
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      return res.json({ error: "invalid json from api", raw: text });
-    }
+    const rawText = row.find("td:nth-child(3)").text().trim().replace("$","").replace(",","");
+    const psa9Text = row.find("td:nth-child(4)").text().trim().replace("$","").replace(",","");
+    const psa10Text = row.find("td:nth-child(5)").text().trim().replace("$","").replace(",","");
 
+    // Convert USD → GBP roughly
     const rate = 0.79;
 
     res.json({
-      raw: data?.prices?.raw ? (data.prices.raw * rate).toFixed(2) : null,
-      psa9: data?.prices?.psa9 ? (data.prices.psa9 * rate).toFixed(2) : null,
-      psa10: data?.prices?.psa10 ? (data.prices.psa10 * rate).toFixed(2) : null
+      raw: rawText ? (parseFloat(rawText)*rate).toFixed(2) : null,
+      psa9: psa9Text ? (parseFloat(psa9Text)*rate).toFixed(2) : null,
+      psa10: psa10Text ? (parseFloat(psa10Text)*rate).toFixed(2) : null
     });
 
   } catch (err) {
-    console.error("SERVER ERROR:", err);
+    console.error(err);
     res.json({ error: "failed", message: err.message });
   }
 });
