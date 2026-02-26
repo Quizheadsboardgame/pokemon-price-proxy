@@ -10,15 +10,30 @@ const API_KEY = "pokeprice_free_2aeea2582995971bab40fead2d3fc6645d131c9d2a9b0ecc
 app.get("/price", async (req, res) => {
   try {
     const name = req.query.name;
+    if (!name) {
+      return res.json({ error: "missing name" });
+    }
 
-    const response = await fetch(
-      `https://www.pokemonpricetracker.com/api/v1/price?name=${encodeURIComponent(name)}`,
-      {
-        headers: { "x-api-key": API_KEY }
-      }
-    );
+    const url =
+      `https://www.pokemonpricetracker.com/api/v1/price?name=${encodeURIComponent(name)}`;
 
-    const data = await response.json();
+    console.log("Fetching:", url);
+
+    const response = await fetch(url, {
+      headers: { "x-api-key": API_KEY }
+    });
+
+    const text = await response.text();
+
+    // 👇 log raw response (VERY IMPORTANT)
+    console.log("API response:", text);
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return res.json({ error: "invalid json from api", raw: text });
+    }
 
     const rate = 0.79;
 
@@ -29,7 +44,8 @@ app.get("/price", async (req, res) => {
     });
 
   } catch (err) {
-    res.json({ error: "failed" });
+    console.error("SERVER ERROR:", err);
+    res.json({ error: "failed", message: err.message });
   }
 });
 
